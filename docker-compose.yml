@@ -1,0 +1,15 @@
+services:
+  web:
+    build: .
+    container_name: django-ecommerce-web
+    ports:
+      - "8000:8000"
+    # Mount your code so edits on Windows reload in the container.
+    # This also persists db.sqlite3 and reads your .env.
+    volumes:
+      - .:/app
+    env_file:
+      - .env
+    environment:
+      DJANGO_SETTINGS_MODULE: djecommerce.settings.development
+    command: sh -c "python manage.py migrate && python manage.py runserver 0.0.0.0:8000"
