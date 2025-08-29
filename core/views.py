@@ -209,6 +209,15 @@ class CheckoutView(View):
 class PaymentView(View):
     def get(self, *args, **kwargs):
         order = Order.objects.get(user=self.request.user, ordered=False)
+ # ✅ Fake mode: no Stripe, no network
+        if getattr(settings, 'FAKE_PAYMENT', False):
+            context = {
+                'order': order,
+                'DISPLAY_COUPON_FORM': False,
+                'FAKE_PAYMENT': True,      # tells the template to hide Stripe UI
+            }
+            return render(self.request, "payment.html", context)
+
         if order.billing_address:
             context = {
                 'order': order,
@@ -240,6 +249,28 @@ class PaymentView(View):
         form = PaymentForm(self.request.POST)
         userprofile = UserProfile.objects.get(user=self.request.user)
         if form.is_valid():
+             # ✅ Fake mode: skip Stripe entirely, just mark paid.
+            if getattr(settings, 'FAKE_PAYMENT', False):
+                fake_id = "FAKE-" + ''.join(random.choices(string.ascii_letters + string.digits, k=24))
+
+                payment = Payment()
+                payment.stripe_charge_id = fake_id
+                payment.user = self.request.user
+                payment.amount = order.get_total()
+                payment.save()
+
+                order_items = order.items.all()
+                order_items.update(ordered=True)
+                for item in order_items:
+                    item.save()
+
+                order.ordered = True
+                order.payment = payment
+                order.ref_code = create_ref_code()
+                order.save()
+
+                messages.success(self.request, "Payment successful (offline test).")
+                return redirect("/")  # or redirect("core:order-summary")
             token = form.cleaned_data.get('stripeToken')
             save = form.cleaned_data.get('save')
             use_default = form.cleaned_data.get('use_default')
